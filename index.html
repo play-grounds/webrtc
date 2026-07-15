@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebRTC Lab — step-by-step connection debugger</title>
+<meta name="description" content="A no-build, in-browser dashboard that tests each layer of a WebRTC peer connection — capabilities, ICE candidates, loopback, signaling, real peers — with buttons and live feedback.">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140; --ink:#e6edf3; --mut:#8b949e;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --info:#58a6ff; --accent:#a371f7; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{padding:18px 20px 10px;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:18px;letter-spacing:.2px}
+  header h1 .tag{color:var(--accent)}
+  header p{margin:4px 0 0;color:var(--mut);font-size:13px}
+  .cfg{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px 12px;align-items:end}
+  .cfg label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+  .cfg input{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 8px;font:12px var(--mono)}
+  .cfg input:focus{outline:none;border-color:var(--info)}
+  .cfg .actions{display:flex;gap:8px;align-items:end;grid-column:1/-1;flex-wrap:wrap}
+  main{padding:16px 20px 20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+  .card.wide{grid-column:1/-1}
+  .card h2{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
+  .card h2 .n{color:var(--mut);font:12px var(--mono);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .card .desc{margin:0;color:var(--mut);font-size:12.5px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:13px;cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--info);background:#222a38}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#0d1117;font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  .badge{font:11px var(--mono);padding:3px 9px;border-radius:20px;border:1px solid var(--line);color:var(--mut);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .badge.ok{color:var(--ok);border-color:#1f4025;background:#0f2913}
+  .badge.warn{color:var(--warn);border-color:#4a3a12;background:#2a2109}
+  .badge.bad{color:var(--bad);border-color:#4a1f1f;background:#2a0f0f}
+  .badge.run{color:var(--info);border-color:#1f3a5a;background:#0f1e33}
+  .badge.idle{color:var(--mut)}
+  .out{font-size:12.5px}
+  .kv{display:flex;align-items:center;gap:8px;padding:3px 0}
+  .kv b{min-width:118px}
+  .kv .muted,.muted{color:var(--mut)}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:var(--mut)}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.info{background:var(--info)}
+  table.cand{width:100%;border-collapse:collapse;font:12px var(--mono)}
+  table.cand th{text-align:left;color:var(--mut);font-weight:500;border-bottom:1px solid var(--line);padding:4px 6px}
+  table.cand td{padding:4px 6px;border-bottom:1px solid #1c222c}
+  table.cand tr.srflx td{color:#7ee787} table.cand tr.relay td{color:var(--accent)}
+  table.cand tr.mdns td{color:var(--warn)}
+  td.good{color:var(--ok)} td.baddim{color:var(--bad)}
+  ul.notes{margin:8px 0 0;padding-left:16px;font-size:12.5px;color:var(--ink)}
+  ul.notes li{margin:3px 0}
+  #share-out{font:11px var(--mono);color:var(--info);word-break:break-all}
+  .console-wrap{grid-column:1/-1}
+  .console-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  #console{background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:8px;height:280px;overflow:auto;font:12px/1.55 var(--mono)}
+  .logline{white-space:pre-wrap;word-break:break-word;padding:1px 2px}
+  .logline .lt{color:#4d5866;margin-right:8px}
+  .logline .ltag{display:inline-block;min-width:56px;color:var(--accent);margin-right:8px}
+  .logline.warn{color:var(--warn)} .logline.error{color:var(--bad)} .logline.ok{color:var(--ok)}
+  select{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 8px;font-size:12px}
+  label.inline{display:inline-flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
+  a{color:var(--info)}
+</style>
+</head>
+<body>
+<header>
+  <h1>WebRTC <span class="tag">Lab</span> — step-by-step connection debugger</h1>
+  <p>Runs entirely in this browser. Each card tests one layer of the pipeline in isolation, with live feedback, so you can see exactly what works, what doesn't, and why.</p>
+</header>
+
+<div class="cfg">
+  <label>Signaling URL (wss)<input id="cfg-sig" placeholder="wss://example.com/.webrtc" spellcheck="false"></label>
+  <label>Room<input id="cfg-room" spellcheck="false"></label>
+  <label>STUN<input id="cfg-stun" spellcheck="false"></label>
+  <label>TURN URL<input id="cfg-turn" placeholder="turn:host:3478 (optional)" spellcheck="false"></label>
+  <label>TURN user<input id="cfg-tu" spellcheck="false"></label>
+  <label>TURN cred<input id="cfg-tc" spellcheck="false"></label>
+  <div class="actions">
+    <button class="primary" id="btn-all">▶ Run quick checks (0–2)</button>
+    <button id="btn-share">Copy shareable link</button>
+    <span id="share-out"></span>
+  </div>
+</div>
+
+<main>
+  <section class="card">
+    <h2><span class="n">0</span> Environment <span class="badge idle" id="probe-badge" style="margin-left:auto">—</span></h2>
+    <p class="desc">Can this browser do WebRTC, data channels, stats, WebSocket, OPFS? Runs on load.</p>
+    <div class="out" id="probe-out"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">1</span> ICE candidates <span class="badge idle" id="ice-badge" style="margin-left:auto">—</span></h2>
+    <p class="desc">The key diagnostic. Shows the addresses this browser will offer a peer, and flags <b>.local</b> (mDNS) host candidates and a missing <b>srflx</b> (STUN failed).</p>
+    <div class="controls"><button id="btn-ice">Gather candidates</button></div>
+    <div class="out" id="ice-out"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">2</span> Loopback <span class="badge idle" id="loop-badge" style="margin-left:auto">—</span></h2>
+    <p class="desc">Two peers in <i>this one tab</i>, wired directly (no signaling). If this fails, WebRTC itself is broken; if it passes, the stack works and any real-peer failure is signaling or reachability.</p>
+    <div class="controls"><button id="btn-loop">Run loopback</button></div>
+    <div class="out" id="loop-out"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">3</span> Signaling <span class="badge idle" id="sig-badge" style="margin-left:auto">—</span></h2>
+    <p class="desc">Tests the WebSocket relay in isolation. Connect, announce into the room, watch raw messages in the log.</p>
+    <div class="controls">
+      <button id="btn-sig-connect">Connect</button>
+      <button id="btn-sig-announce">Announce</button>
+      <button id="btn-sig-close">Close</button>
+    </div>
+    <div class="out muted">Watch the console below for every message in/out.</div>
+  </section>
+
+  <section class="card wide">
+    <h2><span class="n">4</span> Real peers <span class="badge idle" id="mesh-badge" style="margin-left:auto">—</span></h2>
+    <p class="desc">Full offer/answer over signaling (symmetric handshake, non-trickle). Open this page with the <b>same room</b> in another tab, browser, or device. The table shows each peer's ICE state and the <b>selected candidate pair</b> — i.e. <i>how</i> it connected (host/srflx/relay) or where it's stuck.</p>
+    <div class="controls">
+      <button class="primary" id="btn-mesh-start">Start peering</button>
+      <button id="btn-mesh-stop">Stop</button>
+      <span class="badge run">peers: <span id="mesh-count">0</span></span>
+    </div>
+    <div class="out" id="mesh-out"></div>
+  </section>
+
+  <section class="card console-wrap">
+    <div class="console-head">
+      <h2 style="margin:0"><span class="n">≡</span> Console</h2>
+      <select id="log-filter"><option value="info">all</option><option value="warn">warnings + errors</option></select>
+      <label class="inline"><input type="checkbox" id="autoscroll" checked> autoscroll</label>
+      <button id="btn-log-copy">Copy log</button>
+      <button id="btn-log-clear">Clear</button>
+    </div>
+    <div id="console"></div>
+  </section>
+</main>
+
+<script type="module" src="./lab.js"></script>
+</body>
+</html>
