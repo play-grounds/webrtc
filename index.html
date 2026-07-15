@@ -5,10 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WebRTC Lab — step-by-step connection debugger</title>
 <meta name="description" content="A no-build, in-browser dashboard that tests each layer of a WebRTC peer connection — capabilities, ICE candidates, loopback, signaling, real peers — with buttons and live feedback.">
+<script>try{var t=localStorage.getItem('webrtc-lab.theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <style>
   :root{
+    /* light palette (default) */
+    --bg:#f6f8fa; --panel:#ffffff; --panel2:#f6f8fa; --line:#d0d7de; --ink:#1f2328; --mut:#656d76;
+    --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e; --info:#0969da; --accent:#8250df;
+    --code-bg:#f6f8fa; --code-ink:#1f2328; --code-dim:#8c959f;
+    --ok-bg:#dafbe1; --ok-line:#aceebb; --warn-bg:#fff8c5; --warn-line:#eac54f;
+    --bad-bg:#ffebe9; --bad-line:#ff8182; --run-bg:#ddf4ff; --run-line:#54aeff;
+    --row-line:#eaeef2; --btn:#f6f8fa; --btn-hover:#eef1f4; --primary-ink:#ffffff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme]){
     --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140; --ink:#e6edf3; --mut:#8b949e;
-    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --info:#58a6ff; --accent:#a371f7; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --info:#58a6ff; --accent:#a371f7;
+    --code-bg:#0a0d12; --code-ink:#e6edf3; --code-dim:#4d5866;
+    --ok-bg:#0f2913; --ok-line:#1f4025; --warn-bg:#2a2109; --warn-line:#4a3a12;
+    --bad-bg:#2a0f0f; --bad-line:#4a1f1f; --run-bg:#0f1e33; --run-line:#1f3a5a;
+    --row-line:#1c222c; --btn:#1c2230; --btn-hover:#222a38; --primary-ink:#0d1117;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140; --ink:#e6edf3; --mut:#8b949e;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --info:#58a6ff; --accent:#a371f7;
+    --code-bg:#0a0d12; --code-ink:#e6edf3; --code-dim:#4d5866;
+    --ok-bg:#0f2913; --ok-line:#1f4025; --warn-bg:#2a2109; --warn-line:#4a3a12;
+    --bad-bg:#2a0f0f; --bad-line:#4a1f1f; --run-bg:#0f1e33; --run-line:#1f3a5a;
+    --row-line:#1c222c; --btn:#1c2230; --btn-hover:#222a38; --primary-ink:#0d1117;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -28,16 +51,17 @@
   .card h2 .n{color:var(--mut);font:12px var(--mono);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
   .card .desc{margin:0;color:var(--mut);font-size:12.5px}
   .controls{display:flex;gap:8px;flex-wrap:wrap}
-  button{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:13px;cursor:pointer;transition:.12s}
-  button:hover{border-color:var(--info);background:#222a38}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#0d1117;font-weight:600}
+  button{background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-size:13px;cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--info);background:var(--btn-hover)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--primary-ink);font-weight:600}
   button.primary:hover{filter:brightness(1.08)}
   .badge{font:11px var(--mono);padding:3px 9px;border-radius:20px;border:1px solid var(--line);color:var(--mut);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-  .badge.ok{color:var(--ok);border-color:#1f4025;background:#0f2913}
-  .badge.warn{color:var(--warn);border-color:#4a3a12;background:#2a2109}
-  .badge.bad{color:var(--bad);border-color:#4a1f1f;background:#2a0f0f}
-  .badge.run{color:var(--info);border-color:#1f3a5a;background:#0f1e33}
+  .badge.ok{color:var(--ok);border-color:var(--ok-line);background:var(--ok-bg)}
+  .badge.warn{color:var(--warn);border-color:var(--warn-line);background:var(--warn-bg)}
+  .badge.bad{color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg)}
+  .badge.run{color:var(--info);border-color:var(--run-line);background:var(--run-bg)}
   .badge.idle{color:var(--mut)}
+  .theme-toggle{margin-left:auto;padding:4px 10px;font-size:15px;line-height:1}
   .out{font-size:12.5px}
   .kv{display:flex;align-items:center;gap:8px;padding:3px 0}
   .kv b{min-width:118px}
@@ -46,8 +70,8 @@
   .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.info{background:var(--info)}
   table.cand{width:100%;border-collapse:collapse;font:12px var(--mono)}
   table.cand th{text-align:left;color:var(--mut);font-weight:500;border-bottom:1px solid var(--line);padding:4px 6px}
-  table.cand td{padding:4px 6px;border-bottom:1px solid #1c222c}
-  table.cand tr.srflx td{color:#7ee787} table.cand tr.relay td{color:var(--accent)}
+  table.cand td{padding:4px 6px;border-bottom:1px solid var(--row-line)}
+  table.cand tr.srflx td{color:var(--ok)} table.cand tr.relay td{color:var(--accent)}
   table.cand tr.mdns td{color:var(--warn)}
   td.good{color:var(--ok)} td.baddim{color:var(--bad)}
   ul.notes{margin:8px 0 0;padding-left:16px;font-size:12.5px;color:var(--ink)}
@@ -55,9 +79,9 @@
   #share-out{font:11px var(--mono);color:var(--info);word-break:break-all}
   .console-wrap{grid-column:1/-1}
   .console-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
-  #console{background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:8px;height:280px;overflow:auto;font:12px/1.55 var(--mono)}
+  #console{background:var(--code-bg);color:var(--code-ink);border:1px solid var(--line);border-radius:8px;padding:8px;height:280px;overflow:auto;font:12px/1.55 var(--mono)}
   .logline{white-space:pre-wrap;word-break:break-word;padding:1px 2px}
-  .logline .lt{color:#4d5866;margin-right:8px}
+  .logline .lt{color:var(--code-dim);margin-right:8px}
   .logline .ltag{display:inline-block;min-width:56px;color:var(--accent);margin-right:8px}
   .logline.warn{color:var(--warn)} .logline.error{color:var(--bad)} .logline.ok{color:var(--ok)}
   select{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 8px;font-size:12px}
@@ -67,7 +91,10 @@
 </head>
 <body>
 <header>
-  <h1>WebRTC <span class="tag">Lab</span> — step-by-step connection debugger</h1>
+  <div style="display:flex;align-items:center;gap:10px">
+    <h1 style="margin:0">WebRTC <span class="tag">Lab</span> — step-by-step connection debugger</h1>
+    <button id="btn-theme" class="theme-toggle" title="Toggle light / dark">◐</button>
+  </div>
   <p>Runs entirely in this browser. Each card tests one layer of the pipeline in isolation, with live feedback, so you can see exactly what works, what doesn't, and why.</p>
 </header>
 

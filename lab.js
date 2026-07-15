@@ -161,6 +161,15 @@ $('btn-log-copy').onclick = async () => {
 };
 $('log-filter').onchange = (e) => { logLevel = e.target.value; };
 
+// ---- theme toggle ----
+$('btn-theme').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme')
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('webrtc-lab.theme', next); } catch {}
+};
+
 // ---- init ----
 fillCfg();
 renderProbe();
