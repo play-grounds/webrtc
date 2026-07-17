@@ -14,7 +14,7 @@ export class Signal {
       let ws;
       try { ws = this.ws = new WebSocket(this.url); }
       catch (e) { log('signal', 'construct failed: ' + e.message, 'error'); return reject(e); }
-      const to = setTimeout(() => { log('signal', 'connect timeout', 'error'); reject(new Error('ws connect timeout')); }, 8000);
+      const to = setTimeout(() => { log('signal', 'connect timeout', 'error'); try { ws.close(); } catch {} reject(new Error('ws connect timeout')); }, 8000);
       ws.onopen = () => { clearTimeout(to); log('signal', 'ws OPEN ' + this.url, 'ok'); resolve(); };
       ws.onerror = () => { clearTimeout(to); log('signal', 'ws ERROR (see devtools for detail)', 'error'); reject(new Error('ws error')); };
       ws.onclose = (e) => log('signal', `ws CLOSE code=${e.code}${e.reason ? ' ' + e.reason : ''}`, 'warn');

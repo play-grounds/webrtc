@@ -18,7 +18,8 @@ Each file is one layer — the future library:
 | `ice.js` | 1 ICE candidates | What addresses will this browser offer? Flags `.local` (mDNS) hosts and missing `srflx` (STUN failed); shows `relay` (TURN works). **The key diagnostic.** |
 | `loopback.js` | 2 Loopback | Two peers in one tab, no signaling. If this fails WebRTC is broken; if it passes the stack is fine. |
 | `signaling.js` | 3 Signaling | WebSocket relay in isolation — connect, announce, watch raw messages. |
-| `mesh.js` | 4 Real peers | Full offer/answer over signaling (symmetric, non-trickle). Per-peer ICE state + **selected candidate pair** = how it actually connected. |
+| `webrtc-mesh.js` | 4 Real peers | **The canonical mesh library, vendored verbatim from [bitcoin-kernel/health](https://github.com/bitcoin-kernel/health)** — symmetric non-trickle handshake, reconnect, full connection lifecycle (dropped/failed/stale attempts are closed, not leaked). The lab tests exactly what the apps ship. |
+| `mesh.js` | 4 Real peers | Thin instrumentation shim over `webrtc-mesh.js`: logs every peer lifecycle event and runs an app-level ping/pong to prove payload round-trips. |
 | `stats.js` | — | `getStats()` → selected pair (host↔host = LAN, srflx = NAT traversal, relay = TURN). |
 | `log.js` | — | Shared event bus; every layer logs through it to the console panel. |
 | `lab.js` | — | Dashboard wiring. |
@@ -32,7 +33,9 @@ Nothing is hard-coded. Pass a signaling server and room in the URL so links are 
    &turn=turn:host:3478&tu=user&tc=cred
 ```
 
-Room names are hashed to a hex resource automatically (raw hex passes through), so any human name works with hex-only trackers like JSS.
+Room names are hashed to a hex resource automatically (raw hex passes through), so any human name works with hex-only trackers like JSS. The hash comes from the vendored library, so a human room name lands in the **same room here as in the apps** — you can join an app's mesh by name to debug it live (lab peers connect but stay inert in a foreign protocol).
+
+⚠ Config (including TURN credentials) is saved in `localStorage` and embedded in share links — don't paste production TURN creds into a link you'll share publicly.
 
 ## How to read a failure
 
@@ -40,9 +43,9 @@ Room names are hashed to a hex resource automatically (raw hex passes through), 
 - **Loopback passes but real peers stall at `checking`** → candidates aren't reachable between the two sides; add TURN.
 - **No `relay` despite TURN configured** → wrong creds/ports/URL.
 
-## Roadmap
+## Library lineage
 
-Figure everything out here → extract a small reusable peering library → port back into the apps that need it. TURN (coturn / a JSS plugin) slots in as just another ICE server via the config above.
+The extraction happened — in reverse. The handshake was figured out here, ported into bitcoin-kernel/health as `webrtc-mesh.js`, and hardened there (reconnect, connection-lifecycle fixes that closed a real memory leak). That file is now the **single source of truth**; this repo vendors it verbatim and `mesh.js` is just the dashboard shim on top. When the library changes in health, copy it back here — never edit the vendored copy directly. TURN (coturn / a JSS plugin) slots in as just another ICE server via the config above.
 
 ## No build
 

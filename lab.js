@@ -7,7 +7,7 @@ import { probe } from './probe.js';
 import { gatherCandidates } from './ice.js';
 import { loopback } from './loopback.js';
 import { Signal } from './signaling.js';
-import { Mesh } from './mesh.js';
+import { Mesh, toHexResource } from './mesh.js';
 
 const $ = (id) => document.getElementById(id);
 const LS = 'webrtc-lab.config';
@@ -33,14 +33,9 @@ function fillCfg() {
   $('cfg-sig').value = cfg.sig; $('cfg-room').value = cfg.room; $('cfg-stun').value = cfg.stun;
   $('cfg-turn').value = cfg.turn; $('cfg-tu').value = cfg.tu; $('cfg-tc').value = cfg.tc;
 }
-// JSS rooms must be hex [a-f0-9]{8,128}. Accept any human name by hashing it to
-// a stable hex resource; pass raw hex through unchanged (so you can also join a
-// specific hex room to interop with another app).
-async function toHexResource(room) {
-  if (/^[a-f0-9]{8,128}$/i.test(room)) return room.toLowerCase();
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('webrtc-lab:' + room));
-  return [...new Uint8Array(buf)].slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+// Room hashing comes from the canonical library (mesh.js re-export), so a
+// human room name lands in the SAME resource here as in the apps that vendor
+// the library — the lab can join an app's room by name, not just by raw hex.
 function iceServers() {
   const s = [];
   if (cfg.stun) s.push({ urls: cfg.stun });
@@ -115,16 +110,14 @@ function renderPeers(peers, sigState) {
     mesh ? `${peers.length} peer${peers.length === 1 ? '' : 's'} · ws ${['connecting', 'open', 'closing', 'closed'][sigState] ?? '—'}` : 'stopped');
   $('mesh-count').textContent = peers.length;
   $('mesh-out').innerHTML = peers.length ? `<table class="cand"><tr><th>peer</th><th>ice</th><th>conn</th><th>chan</th><th>path</th><th>rtt</th></tr>${peers.map((p) =>
-    `<tr><td>${p.short}</td><td class="${p.ice === 'connected' || p.ice === 'completed' ? 'good' : p.ice === 'failed' ? 'baddim' : ''}">${p.ice}</td><td>${p.conn}</td><td>${p.open ? '✓ open' : '—'}</td><td class="muted">${p.pair?.path ?? '…'}${p.pair?.state ? ' (' + p.pair.state + ')' : ''}</td><td>${p.rtt != null ? p.rtt + 'ms' : '—'}</td></tr>`).join('')}</table>`
+    `<tr><td>${escapeHtml(p.short)}</td><td class="${p.ice === 'connected' || p.ice === 'completed' ? 'good' : p.ice === 'failed' ? 'baddim' : ''}">${p.ice}</td><td>${p.conn}</td><td>${p.open ? '✓ open' : '—'}</td><td class="muted">${p.path ?? '…'}</td><td>${p.rtt != null ? p.rtt + 'ms' : '—'}</td></tr>`).join('')}</table>`
     : `<p class="muted">No peers yet. Open this page (same room) in another tab, browser, or device.</p>`;
 }
 $('btn-mesh-start').onclick = async () => {
   readCfg(); if (!cfg.sig) { log('mesh', 'set a signaling URL first', 'warn'); return; }
   if (mesh) mesh.stop();
   badge($('mesh-badge'), 'run', 'starting…');
-  const resource = await toHexResource(cfg.room);
-  if (resource !== cfg.room) log('mesh', `room "${cfg.room}" → resource ${resource}`);
-  mesh = new Mesh({ url: cfg.sig, room: resource, iceServers: iceServers(), onPeers: renderPeers });
+  mesh = new Mesh({ url: cfg.sig, room: cfg.room, iceServers: iceServers(), onPeers: renderPeers });
   try { await mesh.start(); } catch (e) { badge($('mesh-badge'), 'bad', 'error'); log('mesh', e.message, 'error'); }
 };
 $('btn-mesh-stop').onclick = () => { mesh?.stop(); mesh = null; renderPeers([], -1); badge($('mesh-badge'), 'idle', 'stopped'); };
@@ -151,6 +144,7 @@ onLog((e) => {
   div.className = 'logline ' + e.level;
   div.innerHTML = `<span class="lt">${hhmmss(e.ts)}</span><span class="ltag">${e.tag}</span>${escapeHtml(e.msg)}`;
   logEl.appendChild(div);
+  while (logEl.childElementCount > 2000) logEl.firstChild.remove(); // keep the DOM bounded like the buffer
   if ($('autoscroll').checked) logEl.scrollTop = logEl.scrollHeight;
 });
 function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
