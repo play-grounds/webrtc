@@ -58,7 +58,7 @@ function badge(el, state, text) {
 function renderProbe() {
   const rows = probe();
   $('probe-out').innerHTML = rows.map((r) =>
-    `<div class="kv"><span class="dot ${r.info ? 'info' : r.ok ? 'ok' : 'bad'}"></span><b>${r.name}</b><span class="muted">${r.detail || (r.ok ? 'yes' : 'no')}</span></div>`).join('');
+    `<div class="kv"><span class="dot ${r.info ? 'info' : r.ok ? 'ok' : 'bad'}"></span><b>${escapeHtml(r.name)}</b><span class="muted">${escapeHtml(r.detail || (r.ok ? 'yes' : 'no'))}</span></div>`).join('');
   const fails = rows.filter((r) => !r.ok && !r.info).length;
   badge($('probe-badge'), fails ? 'warn' : 'ok', fails ? `${fails} missing` : 'all present');
 }
@@ -69,8 +69,8 @@ $('btn-ice').onclick = async () => {
   try {
     const { candidates, verdict } = await gatherCandidates({ iceServers: iceServers() });
     const table = `<table class="cand"><tr><th>type</th><th>proto</th><th>address</th><th>port</th><th>via</th></tr>${candidates.map((c) =>
-      `<tr class="${c.type}${c.isMdns ? ' mdns' : ''}"><td>${c.type}</td><td>${c.protocol}</td><td>${c.address}${c.isMdns ? ' ⚠' : ''}</td><td>${c.port}</td><td class="muted">${c.related || ''}</td></tr>`).join('')}</table>`;
-    const notes = `<ul class="notes">${verdict.notes.map((n) => `<li>${n}</li>`).join('')}</ul>`;
+      `<tr class="${escapeHtml(c.type)}${c.isMdns ? ' mdns' : ''}"><td>${escapeHtml(c.type)}</td><td>${escapeHtml(c.protocol)}</td><td>${escapeHtml(c.address)}${c.isMdns ? ' ⚠' : ''}</td><td>${escapeHtml(c.port)}</td><td class="muted">${escapeHtml(c.related || '')}</td></tr>`).join('')}</table>`;
+    const notes = `<ul class="notes">${verdict.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`;
     $('ice-out').innerHTML = table + notes;
     badge($('ice-badge'), verdict.level === 'ok' ? 'ok' : 'warn', verdict.summary);
   } catch (e) { badge($('ice-badge'), 'bad', 'error'); log('ice', e.message, 'error'); }
@@ -85,7 +85,7 @@ $('btn-loop').onclick = async () => {
       <div class="kv"><span class="dot ok"></span><b>round-trip</b><span class="muted">${r.rtt} ms</span></div>
       <div class="kv"><span class="dot info"></span><b>path</b><span class="muted">${r.pair?.path ?? '?'} (${r.pair?.state ?? '?'})</span></div>`;
     badge($('loop-badge'), 'ok', `pass · ${r.rtt}ms`);
-  } catch (e) { $('loop-out').innerHTML = `<div class="kv"><span class="dot bad"></span><b>failed</b><span class="muted">${e.message}</span></div>`; badge($('loop-badge'), 'bad', 'fail'); }
+  } catch (e) { $('loop-out').innerHTML = `<div class="kv"><span class="dot bad"></span><b>failed</b><span class="muted">${escapeHtml(e.message)}</span></div>`; badge($('loop-badge'), 'bad', 'fail'); }
 };
 
 // ---- 3. signaling ----
@@ -93,6 +93,7 @@ let sig = null;
 $('btn-sig-connect').onclick = async () => {
   readCfg(); if (!cfg.sig) { log('signal', 'set a signaling URL first', 'warn'); return; }
   badge($('sig-badge'), 'run', 'connecting…');
+  sig?.close(); // don't leak the previous socket on re-connect
   const resource = await toHexResource(cfg.room);
   if (resource !== cfg.room) log('signal', `room "${cfg.room}" → resource ${resource}`);
   sig = new Signal(cfg.sig, resource);
@@ -110,7 +111,7 @@ function renderPeers(peers, sigState) {
     mesh ? `${peers.length} peer${peers.length === 1 ? '' : 's'} · ws ${['connecting', 'open', 'closing', 'closed'][sigState] ?? '—'}` : 'stopped');
   $('mesh-count').textContent = peers.length;
   $('mesh-out').innerHTML = peers.length ? `<table class="cand"><tr><th>peer</th><th>ice</th><th>conn</th><th>chan</th><th>path</th><th>rtt</th></tr>${peers.map((p) =>
-    `<tr><td>${escapeHtml(p.short)}</td><td class="${p.ice === 'connected' || p.ice === 'completed' ? 'good' : p.ice === 'failed' ? 'baddim' : ''}">${p.ice}</td><td>${p.conn}</td><td>${p.open ? '✓ open' : '—'}</td><td class="muted">${p.path ?? '…'}</td><td>${p.rtt != null ? p.rtt + 'ms' : '—'}</td></tr>`).join('')}</table>`
+    `<tr><td>${escapeHtml(p.short)}</td><td class="${p.ice === 'connected' || p.ice === 'completed' ? 'good' : p.ice === 'failed' ? 'baddim' : ''}">${escapeHtml(p.ice)}</td><td>${escapeHtml(p.conn)}</td><td>${p.open ? '✓ open' : '—'}</td><td class="muted">${escapeHtml(p.path ?? '…')}</td><td>${p.rtt != null ? p.rtt + 'ms' : '—'}</td></tr>`).join('')}</table>`
     : `<p class="muted">No peers yet. Open this page (same room) in another tab, browser, or device.</p>`;
 }
 $('btn-mesh-start').onclick = async () => {
@@ -136,24 +137,32 @@ $('btn-share').onclick = async () => {
 const logEl = $('console');
 let logLevel = 'info';
 const wraps = [];
+function logLine(e) {
+  const div = document.createElement('div');
+  div.className = 'logline ' + e.level;
+  div.innerHTML = `<span class="lt">${hhmmss(e.ts)}</span><span class="ltag">${escapeHtml(e.tag)}</span>${escapeHtml(e.msg)}`;
+  return div;
+}
 onLog((e) => {
   wraps.push(e);
   if (wraps.length > 2000) wraps.shift();
   if (logLevel === 'warn' && e.level === 'info') return;
-  const div = document.createElement('div');
-  div.className = 'logline ' + e.level;
-  div.innerHTML = `<span class="lt">${hhmmss(e.ts)}</span><span class="ltag">${e.tag}</span>${escapeHtml(e.msg)}`;
-  logEl.appendChild(div);
+  logEl.appendChild(logLine(e));
   while (logEl.childElementCount > 2000) logEl.firstChild.remove(); // keep the DOM bounded like the buffer
   if ($('autoscroll').checked) logEl.scrollTop = logEl.scrollHeight;
 });
-function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 $('btn-log-clear').onclick = () => { logEl.innerHTML = ''; wraps.length = 0; };
 $('btn-log-copy').onclick = async () => {
   const text = wraps.map((e) => `${hhmmss(e.ts)} [${e.tag}] ${e.msg}`).join('\n');
   try { await navigator.clipboard.writeText(text); log('lab', `copied ${wraps.length} log lines`); } catch {}
 };
-$('log-filter').onchange = (e) => { logLevel = e.target.value; };
+$('log-filter').onchange = (e) => {
+  logLevel = e.target.value;
+  logEl.innerHTML = ''; // repaint from the buffer so switching back to "all" restores info lines
+  for (const en of wraps) if (!(logLevel === 'warn' && en.level === 'info')) logEl.appendChild(logLine(en));
+  if ($('autoscroll').checked) logEl.scrollTop = logEl.scrollHeight;
+};
 
 // ---- theme toggle ----
 $('btn-theme').onclick = () => {

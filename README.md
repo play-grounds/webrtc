@@ -50,3 +50,7 @@ The extraction happened — in reverse. The handshake was figured out here, port
 ## No build
 
 Plain ES modules + one HTML file. `python3 -m http.server` and open `index.html`, or push to `gh-pages`.
+
+## Tests
+
+The pure parts — candidate parsing, the ICE verdict, room hashing — have Node smoke tests: `node --test test.js` (Node ≥ 22.7, which auto-detects ES modules in `.js` files). Everything involving an actual `RTCPeerConnection` needs a real browser; that's what the lab itself is for.

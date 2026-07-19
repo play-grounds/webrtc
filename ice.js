@@ -17,7 +17,8 @@ export function parseCandidate(s) {
   const port = p[5] || '';
   const protocol = (p[2] || '').toLowerCase();
   const relIdx = p.indexOf('raddr');
-  const related = relIdx >= 0 ? `${p[relIdx + 1]}:${p[p.indexOf('rport') + 1] || ''}` : '';
+  const rportIdx = p.indexOf('rport');
+  const related = relIdx >= 0 ? p[relIdx + 1] + (rportIdx >= 0 ? ':' + p[rportIdx + 1] : '') : '';
   const isMdns = /\.local$/i.test(address);
   return { type, protocol, address, port, related, isMdns, raw };
 }
@@ -25,9 +26,9 @@ export function parseCandidate(s) {
 function waitGather(pc, timeoutMs) {
   return new Promise((res) => {
     if (pc.iceGatheringState === 'complete') return res('complete');
-    const check = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', check); res('complete'); } };
+    const t = setTimeout(() => { pc.removeEventListener('icegatheringstatechange', check); res('timeout'); }, timeoutMs);
+    const check = () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', check); res('complete'); } };
     pc.addEventListener('icegatheringstatechange', check);
-    setTimeout(() => res('timeout'), timeoutMs);
   });
 }
 
@@ -52,8 +53,7 @@ export async function gatherCandidates({ iceServers = [], timeoutMs = 8000 } = {
   return { candidates, verdict, gatherEnd: how };
 }
 
-function analyze(cands, iceServers) {
-  const has = (t) => cands.some((c) => c.type === t);
+export function analyze(cands, iceServers) {
   const hostRaw = cands.filter((c) => c.type === 'host' && !c.isMdns);
   const hostMdns = cands.filter((c) => c.type === 'host' && c.isMdns);
   const srflx = cands.find((c) => c.type === 'srflx');
