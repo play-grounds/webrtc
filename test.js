@@ -3,6 +3,7 @@
 // browser (that's the point of the lab). Run: node --test test.js  (Node ≥ 22.7)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { parseCandidate, analyze } from './ice.js';
 import { toHexResource } from './webrtc-mesh.js';
 import { hhmmss } from './log.js';
@@ -88,4 +89,22 @@ test('toHexResource: human names hash deterministically to 32 hex chars', async 
 
 test('hhmmss: zero-pads every field', () => {
   assert.equal(hhmmss(new Date(2026, 0, 1, 5, 7, 9, 3)), '05:07:09.003');
+});
+
+// webrtc-mesh.js is vendored VERBATIM from bitcoin-kernel/health — this turns
+// that convention into a checked guarantee. Skips when offline.
+test('vendor drift: webrtc-mesh.js is byte-identical to bitcoin-kernel/health', async (t) => {
+  const url = 'https://raw.githubusercontent.com/bitcoin-kernel/health/gh-pages/webrtc-mesh.js';
+  let upstream;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    upstream = await res.text();
+  } catch (e) {
+    t.skip('upstream unreachable (offline?): ' + e.message);
+    return;
+  }
+  const local = await readFile(new URL('./webrtc-mesh.js', import.meta.url), 'utf8');
+  assert.ok(local === upstream,
+    'webrtc-mesh.js has drifted from bitcoin-kernel/health — never edit the vendored copy; change it upstream and copy it back verbatim');
 });

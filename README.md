@@ -45,7 +45,7 @@ Room names are hashed to a hex resource automatically (raw hex passes through), 
 
 ## Library lineage
 
-The extraction happened — in reverse. The handshake was figured out here, ported into bitcoin-kernel/health as `webrtc-mesh.js`, and hardened there (reconnect, connection-lifecycle fixes that closed a real memory leak). That file is now the **single source of truth**; this repo vendors it verbatim and `mesh.js` is just the dashboard shim on top. When the library changes in health, copy it back here — never edit the vendored copy directly. TURN (coturn / a JSS plugin) slots in as just another ICE server via the config above.
+The extraction happened — in reverse. The handshake was figured out here, ported into bitcoin-kernel/health as `webrtc-mesh.js`, and hardened there (reconnect, connection-lifecycle fixes that closed a real memory leak). That file is now the **single source of truth**; this repo vendors it verbatim and `mesh.js` is just the dashboard shim on top. When the library changes in health, copy it back here — never edit the vendored copy directly. A test in `test.js` fetches the canonical file and fails if the vendored copy has drifted. TURN (coturn / a JSS plugin) slots in as just another ICE server via the config above.
 
 ## No build
 
