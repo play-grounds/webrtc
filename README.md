@@ -20,6 +20,7 @@ Each file is one layer — the future library:
 | `signaling.js` | 3 Signaling | WebSocket relay in isolation — connect, announce, watch raw messages. |
 | `webrtc-mesh.js` | 4 Real peers | **The canonical mesh library, vendored verbatim from [bitcoin-kernel/health](https://github.com/bitcoin-kernel/health)** — symmetric non-trickle handshake, reconnect, full connection lifecycle (dropped/failed/stale attempts are closed, not leaked). The lab tests exactly what the apps ship. |
 | `mesh.js` | 4 Real peers | Thin instrumentation shim over `webrtc-mesh.js`: logs every peer lifecycle event and runs an app-level ping/pong to prove payload round-trips. |
+| `turn.js` | 5 TURN relay | Fetches short-lived credentials from a TURN REST endpoint (the JSS `turn` plugin), then forces a loopback through the relay only (`iceTransportPolicy: 'relay'`). Passing means peers behind hostile NATs will connect. |
 | `stats.js` | — | `getStats()` → selected pair (host↔host = LAN, srflx = NAT traversal, relay = TURN). |
 | `log.js` | — | Shared event bus; every layer logs through it to the console panel. |
 | `lab.js` | — | Dashboard wiring. |

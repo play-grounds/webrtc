@@ -109,6 +109,7 @@
   <label>TURN URL<input id="cfg-turn" placeholder="turn:host:3478 (optional)" spellcheck="false"></label>
   <label>TURN user<input id="cfg-tu" spellcheck="false"></label>
   <label>TURN cred<input id="cfg-tc" spellcheck="false"></label>
+  <label>TURN REST URL<input id="cfg-turnrest" placeholder="https://pod/.turn/credentials" spellcheck="false"></label>
   <div class="actions">
     <button class="primary" id="btn-all">▶ Run quick checks (0–2)</button>
     <button id="btn-share">Copy shareable link</button>
@@ -157,6 +158,16 @@
       <span class="badge">peers: <span id="mesh-count">0</span></span>
     </div>
     <div class="out" id="mesh-out"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">5</span> TURN relay <span class="badge idle" id="turn-badge" style="margin-left:auto">—</span></h2>
+    <p class="desc">Fetches short-lived credentials from a <b>TURN REST</b> endpoint (e.g. the JSS <code>turn</code> plugin), then forces a loopback through the <b>relay only</b> — no host/srflx shortcuts. Passing means peers behind hostile NATs will connect. Fetched credentials are used by every layer for the rest of this session (they expire on their own).</p>
+    <div class="controls">
+      <button id="btn-turn-fetch">Fetch credentials</button>
+      <button class="primary" id="btn-turn-test">Test relay</button>
+    </div>
+    <div class="out" id="turn-out"></div>
   </section>
 
   <section class="card console-wrap">

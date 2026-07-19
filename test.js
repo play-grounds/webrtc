@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { parseCandidate, analyze } from './ice.js';
 import { toHexResource } from './webrtc-mesh.js';
 import { hhmmss } from './log.js';
+import { normalizeTurnCredentials, credentialTtl } from './turn.js';
 
 test('parseCandidate: udp host', () => {
   const c = parseCandidate('candidate:842163049 1 udp 1677729535 192.168.1.10 54321 typ host generation 0');
@@ -107,4 +108,26 @@ test('vendor drift: webrtc-mesh.js is byte-identical to bitcoin-kernel/health', 
   const local = await readFile(new URL('./webrtc-mesh.js', import.meta.url), 'utf8');
   assert.ok(local === upstream,
     'webrtc-mesh.js has drifted from bitcoin-kernel/health — never edit the vendored copy; change it upstream and copy it back verbatim');
+});
+
+test('normalizeTurnCredentials: draft shape → iceServers', () => {
+  const s = normalizeTurnCredentials({ username: '1784500000:tab1', password: 'p=', ttl: 600, uris: ['turn:h:3478?transport=udp', 'turns:h:5349'] });
+  assert.deepEqual(s, [{ urls: ['turn:h:3478?transport=udp', 'turns:h:5349'], username: '1784500000:tab1', credential: 'p=' }]);
+});
+
+test('normalizeTurnCredentials: ready-made iceServers pass through', () => {
+  const servers = [{ urls: ['turn:h:3478'], username: 'u', credential: 'c' }];
+  assert.equal(normalizeTurnCredentials({ iceServers: servers }), servers);
+});
+
+test('normalizeTurnCredentials: rejects junk loudly', () => {
+  assert.throws(() => normalizeTurnCredentials({}), /unrecognised credentials shape/);
+  assert.throws(() => normalizeTurnCredentials({ uris: [], username: 'x', password: 'y' }), /unrecognised/);
+});
+
+test('credentialTtl: reads the unix expiry off the username', () => {
+  const now = 1784500000_000; // ms
+  assert.equal(credentialTtl([{ urls: ['turn:h:1'], username: '1784500600:tag', credential: 'c' }], now), 600);
+  assert.equal(credentialTtl([{ urls: ['turn:h:1'], username: '1784500600', credential: 'c' }], now), 600);
+  assert.equal(credentialTtl([{ urls: ['turn:h:1'], username: 'static-user', credential: 'c' }], now), null);
 });

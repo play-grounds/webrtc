@@ -8,6 +8,7 @@ import { gatherCandidates } from './ice.js';
 import { loopback } from './loopback.js';
 import { Signal } from './signaling.js';
 import { Mesh, toHexResource } from './mesh.js';
+import { fetchTurnCredentials, relayLoopback, credentialTtl } from './turn.js';
 
 const $ = (id) => document.getElementById(id);
 const LS = 'webrtc-lab.config';
@@ -22,30 +23,37 @@ const cfg = {
   turn: qs.get('turn') || saved.turn || '',
   tu: qs.get('tu') || saved.tu || '',
   tc: qs.get('tc') || saved.tc || '',
+  turnrest: qs.get('turnrest') || saved.turnrest || '',
 };
 function readCfg() {
   cfg.sig = $('cfg-sig').value.trim(); cfg.room = $('cfg-room').value.trim();
   cfg.stun = $('cfg-stun').value.trim(); cfg.turn = $('cfg-turn').value.trim();
   cfg.tu = $('cfg-tu').value.trim(); cfg.tc = $('cfg-tc').value.trim();
+  cfg.turnrest = $('cfg-turnrest').value.trim();
   localStorage.setItem(LS, JSON.stringify(cfg));
 }
 function fillCfg() {
   $('cfg-sig').value = cfg.sig; $('cfg-room').value = cfg.room; $('cfg-stun').value = cfg.stun;
   $('cfg-turn').value = cfg.turn; $('cfg-tu').value = cfg.tu; $('cfg-tc').value = cfg.tc;
+  $('cfg-turnrest').value = cfg.turnrest;
 }
 // Room hashing comes from the canonical library (mesh.js re-export), so a
 // human room name lands in the SAME resource here as in the apps that vendor
 // the library — the lab can join an app's room by name, not just by raw hex.
+// Credentials fetched from a TURN REST endpoint this session. Not persisted
+// on purpose — they expire; the endpoint is the durable config (cfg.turnrest).
+let turnCreds = null;
 function iceServers() {
   const s = [];
   if (cfg.stun) s.push({ urls: cfg.stun });
-  if (cfg.turn) s.push({ urls: cfg.turn, username: cfg.tu, credential: cfg.tc });
+  if (turnCreds && (credentialTtl(turnCreds) ?? 1) > 0) s.push(...turnCreds);
+  else if (cfg.turn) s.push({ urls: cfg.turn, username: cfg.tu, credential: cfg.tc });
   return s;
 }
 function shareLink() {
   readCfg();
   const p = new URLSearchParams();
-  for (const k of ['sig', 'room', 'stun', 'turn', 'tu', 'tc']) if (cfg[k]) p.set(k, cfg[k]);
+  for (const k of ['sig', 'room', 'stun', 'turn', 'tu', 'tc', 'turnrest']) if (cfg[k]) p.set(k, cfg[k]);
   return location.origin + location.pathname + '?' + p.toString();
 }
 
@@ -86,6 +94,38 @@ $('btn-loop').onclick = async () => {
       <div class="kv"><span class="dot info"></span><b>path</b><span class="muted">${r.pair?.path ?? '?'} (${r.pair?.state ?? '?'})</span></div>`;
     badge($('loop-badge'), 'ok', `pass · ${r.rtt}ms`);
   } catch (e) { $('loop-out').innerHTML = `<div class="kv"><span class="dot bad"></span><b>failed</b><span class="muted">${escapeHtml(e.message)}</span></div>`; badge($('loop-badge'), 'bad', 'fail'); }
+};
+
+// ---- 5. TURN relay ----
+$('btn-turn-fetch').onclick = async () => {
+  readCfg(); badge($('turn-badge'), 'run', 'fetching…'); $('turn-out').innerHTML = '';
+  try {
+    if (!cfg.turnrest) throw new Error('set the TURN REST URL in the config bar');
+    turnCreds = await fetchTurnCredentials(cfg.turnrest);
+    const s = turnCreds[0];
+    const ttl = credentialTtl(turnCreds);
+    $('turn-out').innerHTML = `<div class="kv"><span class="dot ok"></span><b>credentials</b><span class="muted">user ${escapeHtml(String(s.username))}${ttl != null ? ` · expires in ~${Math.round(ttl / 60)}m` : ''}</span></div>
+      <div class="kv"><span class="dot info"></span><b>uris</b><span class="muted">${escapeHtml([].concat(s.urls).join(' · '))}</span></div>`;
+    badge($('turn-badge'), 'ok', 'credentials ready');
+    return true;
+  } catch (e) {
+    $('turn-out').innerHTML = `<div class="kv"><span class="dot bad"></span><b>fetch failed</b><span class="muted">${escapeHtml(e.message)}</span></div>`;
+    badge($('turn-badge'), 'bad', 'fetch failed'); log('turn', e.message, 'error');
+    return false;
+  }
+};
+$('btn-turn-test').onclick = async () => {
+  readCfg();
+  if (!turnCreds && cfg.turnrest) { if (!await $('btn-turn-fetch').onclick()) return; }
+  badge($('turn-badge'), 'run', 'relaying…');
+  try {
+    const r = await relayLoopback({ iceServers: iceServers() });
+    $('turn-out').innerHTML += `<div class="kv"><span class="dot ok"></span><b>relay loopback</b><span class="muted">open in ${r.openMs}ms · RTT ${r.rtt}ms · path ${escapeHtml(r.pair?.path ?? '?')}</span></div>`;
+    badge($('turn-badge'), 'ok', `relay OK · ${r.rtt}ms`);
+  } catch (e) {
+    $('turn-out').innerHTML += `<div class="kv"><span class="dot bad"></span><b>relay loopback failed</b><span class="muted">${escapeHtml(e.message)}</span></div>`;
+    badge($('turn-badge'), 'bad', 'relay failed'); log('turn', e.message, 'error');
+  }
 };
 
 // ---- 3. signaling ----
@@ -179,4 +219,4 @@ renderProbe();
 renderPeers([], -1);
 document.querySelectorAll('.cfg input').forEach((i) => i.addEventListener('change', readCfg));
 log('lab', `WebRTC Lab ready · room "${cfg.room}"${cfg.sig ? ' · signaling ' + cfg.sig : ' · no signaling set'}`);
-window.LAB = { probe, gatherCandidates, loopback, Signal, Mesh, cfg, iceServers, get mesh() { return mesh; }, get sig() { return sig; } };
+window.LAB = { probe, gatherCandidates, loopback, Signal, Mesh, cfg, iceServers, fetchTurnCredentials, relayLoopback, get turnCreds() { return turnCreds; }, get mesh() { return mesh; }, get sig() { return sig; } };

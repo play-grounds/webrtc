@@ -6,9 +6,11 @@
 import { log } from './log.js';
 import { selectedPair } from './stats.js';
 
-export async function loopback({ iceServers = [], timeoutMs = 10000 } = {}) {
-  const a = new RTCPeerConnection({ iceServers });
-  const b = new RTCPeerConnection({ iceServers });
+export async function loopback({ iceServers = [], timeoutMs = 10000, iceTransportPolicy = 'all' } = {}) {
+  // 'relay' restricts ICE to TURN candidates — the turn layer uses it to
+  // prove the relay path with no host/srflx shortcuts available.
+  const a = new RTCPeerConnection({ iceServers, iceTransportPolicy });
+  const b = new RTCPeerConnection({ iceServers, iceTransportPolicy });
   const t0 = performance.now();
 
   a.onicecandidate = (e) => { if (e.candidate) b.addIceCandidate(e.candidate).catch((err) => log('loop', 'B addIce failed: ' + err.message, 'warn')); };
